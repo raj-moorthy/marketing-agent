@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold text-white">Advanced Content Studio</h2>
+        <span class="bg-blue-900 text-blue-300 px-3 py-1 rounded text-sm"><i class="fas fa-robot"></i> Multi-Platform Agent</span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        
+        <div class="space-y-6">
+            <div class="card p-6 rounded-xl">
+                <h3 class="text-lg font-semibold text-gray-300 mb-4">1. Upload & Brand</h3>
+                <input type="file" id="fileInput" class="block w-full text-sm text-gray-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:bg-blue-900 file:text-blue-300 hover:file:bg-blue-800 mb-4">
+                <input type="text" id="topicInput" placeholder="Topic (e.g. New Product Launch)" class="w-full bg-gray-900 border border-gray-700 rounded p-3 text-white focus:border-blue-500 outline-none">
+                
+                <button onclick="processAndGenerate()" id="genBtn" class="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 py-3 rounded-xl font-bold text-white transition hover:opacity-90">
+                    <i class="fas fa-magic mr-2"></i> Brand Image & Gen Captions
+                </button>
+            </div>
+
+            <div class="card p-4 rounded-xl hidden" id="imgPreviewCard">
+                <h3 class="text-sm text-gray-400 mb-2">Branded Preview</h3>
+                <img id="previewImg" class="w-full rounded-lg border border-gray-700">
+            </div>
+        </div>
+
+        <div class="card p-6 rounded-xl hidden h-fit" id="captionPanel">
+            <h3 class="text-lg font-semibold text-gray-300 mb-4">2. AI Generated Captions</h3>
+            
+            <div class="flex border-b border-gray-700 mb-4">
+                <button onclick="switchTab('linkedin')" id="tab-linkedin" class="flex-1 py-2 text-blue-400 border-b-2 border-blue-400 font-bold">LinkedIn</button>
+                <button onclick="switchTab('facebook')" id="tab-facebook" class="flex-1 py-2 text-gray-400 hover:text-white">Facebook</button>
+                <button onclick="switchTab('instagram')" id="tab-instagram" class="flex-1 py-2 text-gray-400 hover:text-white">Instagram</button>
+            </div>
+
+            <textarea id="txt-linkedin" class="w-full h-48 bg-gray-900 border border-gray-700 rounded p-3 text-gray-200 text-sm"></textarea>
+            <textarea id="txt-facebook" class="w-full h-48 bg-gray-900 border border-gray-700 rounded p-3 text-gray-200 text-sm hidden"></textarea>
+            <textarea id="txt-instagram" class="w-full h-48 bg-gray-900 border border-gray-700 rounded p-3 text-gray-200 text-sm hidden"></textarea>
+
+            <div class="mt-6">
+                <p class="text-sm text-gray-400 mb-2">Select where to post:</p>
+                <div class="flex gap-4 mb-4">
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="linkedin" class="platform-check w-4 h-4" checked> <span class="text-white">LinkedIn</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="facebook" class="platform-check w-4 h-4"> <span class="text-white">Facebook</span>
+                    </label>
+                    <label class="flex items-center space-x-2 cursor-pointer">
+                        <input type="checkbox" value="instagram" class="platform-check w-4 h-4"> <span class="text-white">Instagram</span>
+                    </label>
+                </div>
+
+                <button onclick="broadcastPost()" id="postBtn" class="w-full bg-green-600 hover:bg-green-500 text-white font-bold py-3 rounded-lg transition">
+                    <i class="fas fa-paper-plane mr-2"></i> Post Selected
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentImgUrl = "";
+    
+    // Tab Switcher Logic
+    function switchTab(platform) {
+        // Reset classes
+        ['linkedin', 'facebook', 'instagram'].forEach(p => {
+            document.getElementById(`tab-${p}`).className = "flex-1 py-2 text-gray-400 hover:text-white border-b-2 border-transparent";
+            document.getElementById(`txt-${p}`).classList.add('hidden');
+        });
+        // Activate selected
+        document.getElementById(`tab-${platform}`).className = "flex-1 py-2 text-blue-400 border-b-2 border-blue-400 font-bold";
+        document.getElementById(`txt-${platform}`).classList.remove('hidden');
+    }
+
+    async function processAndGenerate() {
+        const file = document.getElementById('fileInput').files[0];
+        const topic = document.getElementById('topicInput').value;
+        const btn = document.getElementById('genBtn');
+
+        if(!file || !topic) return alert("Upload file and enter topic");
+
+        btn.innerHTML = '<i class="fas fa-circle-notch fa-spin"></i> Processing Branding & AI...';
+        btn.disabled = true;
+
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('topic', topic);
+
+        try {
+            const res = await fetch('/api/process_generate', { method: 'POST', body: formData });
+            const data = await res.json();
+            
+            // 1. Show Branded Image
+            currentImgUrl = data.image_url;
+            document.getElementById('previewImg').src = currentImgUrl;
+            document.getElementById('imgPreviewCard').classList.remove('hidden');
+
+            // 2. Populate Text Areas
+            document.getElementById('txt-linkedin').value = data.captions.linkedin;
+            document.getElementById('txt-facebook').value = data.captions.facebook;
+            document.getElementById('txt-instagram').value = data.captions.instagram;
+            
+            document.getElementById('captionPanel').classList.remove('hidden');
+
+        } catch(e) {
+            alert("Error: " + e);
+        } finally {
+            btn.innerHTML = '<i class="fas fa-magic mr-2"></i> Brand Image & Gen Captions';
+            btn.disabled = false;
+        }
+    }
+
+    async function broadcastPost() {
+        const platforms = Array.from(document.querySelectorAll('.platform-check:checked')).map(cb => cb.value);
+        if(platforms.length === 0) return alert("Select at least one platform");
+
+        const btn = document.getElementById('postBtn');
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Posting...';
+
+        // Gather edited captions
+        const captions = {
+            linkedin: document.getElementById('txt-linkedin').value,
+            facebook: document.getElementById('txt-facebook').value,
+            instagram: document.getElementById('txt-instagram').value
+        };
+
+        try {
+            const res = await fetch('/api/broadcast', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    platforms: platforms,
+                    captions: captions,
+                    image_url: currentImgUrl
+                })
+            });
+            const data = await res.json();
+            let msg = "Report:\n";
+            for (const [key, value] of Object.entries(data.details)) {
+                msg += `${key.toUpperCase()}: ${value}\n`;
+            }
+            alert(msg);
+            if(!msg.includes("Failed")) window.location.href = "/";
+        } catch(e) {
+            alert("Error: " + e);
+        } finally {
+            btn.innerHTML = '<i class="fas fa-paper-plane mr-2"></i> Post Selected';
+        }
+    }
+</script>
+{% endblock %}

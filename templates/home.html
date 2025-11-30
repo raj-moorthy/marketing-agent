@@ -1,0 +1,201 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="flex flex-col h-screen max-h-[90vh]">
+    <div id="chat-feed" class="flex-1 overflow-y-auto p-4 space-y-6">
+        <div class="flex gap-4 max-w-3xl mx-auto">
+            <div class="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0"><i class="fas fa-camera text-white"></i></div>
+            <div class="bg-gray-800 p-6 rounded-2xl rounded-tl-none border border-gray-700">
+                <h2 class="text-xl font-bold text-white mb-2">Marketing Agent</h2>
+                <p class="text-gray-300">Choose Mode: <b>Upload Photo</b> or <b>Generate Poster</b>. I will handle branding and captions.</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="p-4 bg-[#0B1120] border-t border-gray-800">
+        <div class="max-w-3xl mx-auto relative">
+            <div class="flex justify-center gap-4 mb-4">
+                <button id="btn-mode-upload" onclick="triggerUpload()" class="bg-blue-600 text-white px-6 py-3 rounded-full font-bold text-sm transition shadow-lg border border-blue-500">
+                    <i class="fas fa-upload mr-2"></i> Upload Photo
+                </button>
+                <button id="btn-mode-generate" onclick="setMode('generate')" class="bg-gray-700 text-gray-300 px-6 py-3 rounded-full font-bold text-sm transition border border-gray-600">
+                    <i class="fas fa-magic mr-2"></i> Generate Poster
+                </button>
+            </div>
+
+            <div id="upload-preview" class="hidden absolute bottom-20 left-0 bg-gray-800 p-2 rounded-lg border border-gray-600">
+                <span id="file-name" class="text-xs text-gray-300"></span>
+                <button onclick="clearFile()" class="ml-2 text-red-400"><i class="fas fa-times"></i></button>
+            </div>
+
+            <div class="flex gap-2">
+                <input type="file" id="fileInput" class="hidden" onchange="handleFileSelect(this)">
+                <input type="text" id="userPrompt" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 text-white focus:ring-2 focus:ring-blue-500 transition" placeholder="Add a quote..." onkeypress="handleEnter(event)">
+                <button onclick="sendMessage()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 rounded-xl font-bold transition transform hover:scale-105"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="postModal" class="fixed inset-0 bg-black/95 hidden z-50 flex items-center justify-center backdrop-blur-sm p-4">
+    <div class="bg-gray-900 w-full max-w-7xl h-[90vh] rounded-2xl border border-gray-700 flex flex-col overflow-hidden shadow-2xl">
+        <div class="p-6 border-b border-gray-800 flex justify-between items-center bg-gray-900">
+            <h3 class="text-2xl font-bold text-white">Review & Schedule</h3>
+            <button onclick="closeModal()" class="text-gray-400 hover:text-white"><i class="fas fa-times text-2xl"></i></button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-6 bg-[#0B1120]">
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div class="bg-white rounded-xl overflow-hidden shadow-lg flex flex-col h-full">
+                    <div class="p-4 border-b flex items-center gap-3 bg-gray-50"><i class="fab fa-linkedin text-[#0A66C2] text-2xl"></i> <span class="font-bold text-black">LinkedIn</span></div>
+                    <textarea id="prev-text-linkedin" class="w-full p-4 text-sm text-gray-800 h-40 border-b resize-none focus:outline-none bg-gray-50"></textarea>
+                    <img id="prev-img-linkedin" class="w-full object-cover">
+                </div>
+                <div class="bg-white rounded-xl overflow-hidden shadow-lg flex flex-col h-full">
+                    <div class="p-4 border-b flex items-center gap-3 bg-gray-50"><i class="fab fa-facebook text-[#1877F2] text-2xl"></i> <span class="font-bold text-black">Facebook</span></div>
+                    <textarea id="prev-text-facebook" class="w-full p-4 text-sm text-gray-800 h-40 border-b resize-none focus:outline-none bg-gray-50"></textarea>
+                    <img id="prev-img-facebook" class="w-full object-cover">
+                </div>
+                <div class="bg-white rounded-xl overflow-hidden shadow-lg flex flex-col h-full">
+                    <div class="p-3 border-b flex items-center gap-2"><i class="fab fa-instagram text-pink-600 text-2xl"></i> <span class="font-bold text-black">Instagram</span></div>
+                    <img id="prev-img-instagram" class="w-full object-cover">
+                    <textarea id="prev-text-instagram" class="w-full p-4 text-sm text-gray-800 h-40 resize-none focus:outline-none bg-gray-50"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="p-6 border-t border-gray-800 bg-gray-900 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex gap-4">
+                <label class="flex items-center space-x-2 text-white"><input type="checkbox" id="chk-li" checked class="accent-blue-500 w-5 h-5"> <span>LinkedIn</span></label>
+                <label class="flex items-center space-x-2 text-white"><input type="checkbox" id="chk-fb" checked class="accent-blue-600 w-5 h-5"> <span>Facebook</span></label>
+                <label class="flex items-center space-x-2 text-white"><input type="checkbox" id="chk-ig" checked class="accent-pink-500 w-5 h-5"> <span>Instagram</span></label>
+            </div>
+            <div class="flex gap-4 items-center">
+                <input type="datetime-local" id="scheduleTime" class="bg-gray-800 text-white border border-gray-600 rounded p-2 text-sm">
+                <button onclick="confirmAction('schedule')" class="bg-gray-700 hover:bg-gray-600 text-white px-6 py-2 rounded-lg font-bold">Schedule</button>
+                <button onclick="confirmAction('instant')" class="bg-green-600 hover:bg-green-500 text-white px-6 py-2 rounded-lg font-bold">Post Now</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let globalData = null;
+    let activeMode = 'upload';
+
+    function triggerUpload() {
+        activeMode = 'upload';
+        const btnUpload = document.getElementById('btn-mode-upload');
+        const btnGenerate = document.getElementById('btn-mode-generate');
+        btnUpload.className = "bg-blue-600 text-white px-6 py-3 rounded-full font-bold text-sm transition hover:scale-105 border border-blue-500 shadow-lg flex items-center";
+        btnGenerate.className = "bg-gray-700 text-gray-300 px-6 py-3 rounded-full font-bold text-sm transition hover:scale-105 border border-gray-600 flex items-center";
+        document.getElementById('userPrompt').placeholder = "Add a quote for your photo...";
+        document.getElementById('fileInput').click();
+    }
+
+    function setMode(mode) {
+        activeMode = mode;
+        clearFile();
+        const btnUpload = document.getElementById('btn-mode-upload');
+        const btnGenerate = document.getElementById('btn-mode-generate');
+        btnGenerate.className = "bg-blue-600 text-white px-6 py-3 rounded-full font-bold text-sm transition hover:scale-105 border border-blue-500 shadow-lg flex items-center";
+        btnUpload.className = "bg-gray-700 text-gray-300 px-6 py-3 rounded-full font-bold text-sm transition hover:scale-105 border border-gray-600 flex items-center";
+        document.getElementById('userPrompt').placeholder = "Describe the poster...";
+        document.getElementById('userPrompt').focus();
+    }
+
+    function handleFileSelect(input) { if(input.files.length) { document.getElementById('upload-preview').classList.remove('hidden'); document.getElementById('file-name').innerText = input.files[0].name; }}
+    function clearFile() { document.getElementById('fileInput').value = ""; document.getElementById('upload-preview').classList.add('hidden'); }
+    function handleEnter(e) { if(e.key === 'Enter') sendMessage(); }
+
+    async function sendMessage() {
+        const prompt = document.getElementById('userPrompt').value;
+        const file = document.getElementById('fileInput').files[0];
+
+        if (activeMode === 'upload' && !file) return alert("Please upload a photo first!");
+        if (activeMode === 'generate' && !prompt) return alert("Please describe the poster!");
+
+        const feed = document.getElementById('chat-feed');
+        feed.innerHTML += `<div class="flex gap-4 max-w-3xl mx-auto flex-row-reverse"><div class="bg-blue-600 p-4 rounded-2xl rounded-tr-none text-white">${prompt || "Image Upload"}</div></div>`;
+        document.getElementById('userPrompt').value = "";
+        clearFile();
+
+        const loadingId = 'loading-' + Date.now();
+        feed.innerHTML += `<div id="${loadingId}" class="flex gap-4 max-w-3xl mx-auto"><div class="bg-gray-800 p-6 rounded-2xl rounded-tl-none border border-gray-700 text-gray-200"><i class="fas fa-circle-notch fa-spin"></i> Processing...</div></div>`;
+        feed.scrollTop = feed.scrollHeight;
+
+        const formData = new FormData();
+        formData.append('prompt', prompt);
+        if(activeMode === 'upload' && file) formData.append('file', file);
+
+        try {
+            const res = await fetch('/api/chat_generate', { method: 'POST', body: formData });
+            const data = await res.json();
+            globalData = data;
+            document.getElementById(loadingId).remove();
+
+            // --- FIXED: Inject Captions into TEXTAREAS ---
+            ['linkedin','facebook','instagram'].forEach(p => {
+                const imgEl = document.getElementById(`prev-img-${p}`);
+                const txtEl = document.getElementById(`prev-text-${p}`);
+                if(imgEl) imgEl.src = data.image_url;
+                if(txtEl && data.captions) txtEl.value = data.captions[p]; // Use .value for textarea
+            });
+
+            openModal();
+
+        } catch(e) { 
+            document.getElementById(loadingId).remove();
+            alert("Error: " + e); 
+        }
+    }
+
+    function openModal() { document.getElementById('postModal').classList.remove('hidden'); }
+    function closeModal() { document.getElementById('postModal').classList.add('hidden'); }
+
+    async function confirmAction(action) {
+        const platforms = [];
+        if(document.getElementById('chk-li').checked) platforms.push('linkedin');
+        if(document.getElementById('chk-fb').checked) platforms.push('facebook');
+        if(document.getElementById('chk-ig').checked) platforms.push('instagram');
+        const time = document.getElementById('scheduleTime').value;
+
+        if(platforms.length === 0) return alert("Select a platform");
+        if(action === 'schedule' && !time) return alert("Select a time");
+
+        closeModal();
+        
+        // Fetch values from textareas in case user edited them
+        const finalCaptions = {
+            linkedin: document.getElementById('prev-text-linkedin').value,
+            facebook: document.getElementById('prev-text-facebook').value,
+            instagram: document.getElementById('prev-text-instagram').value
+        };
+
+        const res = await fetch('/api/confirm_post', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                action: action, 
+                time: time, 
+                platforms: platforms, 
+                captions: finalCaptions, 
+                image_url: globalData.image_url 
+            })
+        });
+        
+        const data = await res.json();
+        
+        if(action === 'schedule') {
+            alert("Scheduled Successfully!");
+        } else {
+            let msg = "Report:\n";
+            for (const [p, s] of Object.entries(data.details)) {
+                msg += `${p.toUpperCase()}: ${s}\n`;
+            }
+            alert(msg);
+        }
+        window.location.href = "/dashboard";
+    }
+</script>
+{% endblock %}

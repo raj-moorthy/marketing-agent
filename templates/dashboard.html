@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="p-6">
+    <div class="flex justify-between items-center mb-6">
+        <div>
+            <h2 class="text-2xl font-bold text-white">Performance Overview</h2>
+            <p class="text-gray-400">Real-time data based on your posting history.</p>
+        </div>
+        <button onclick="window.location.reload()" class="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded-lg text-sm border border-gray-600 transition">
+            <i class="fas fa-sync mr-2"></i> Refresh Data
+        </button>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium">Total Impressions</p>
+                    <h3 class="text-3xl font-bold text-white mt-1">{{ stats.total_impressions }}</h3>
+                </div>
+                <div class="p-2 bg-blue-500/20 rounded-lg"><i class="fas fa-eye text-blue-500"></i></div>
+            </div>
+            <p class="text-green-400 text-sm mt-4">Estimated Reach</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium">Avg Engagement</p>
+                    <h3 class="text-3xl font-bold text-white mt-1">{{ stats.engagement_rate }}</h3>
+                </div>
+                <div class="p-2 bg-purple-500/20 rounded-lg"><i class="fas fa-chart-line text-purple-500"></i></div>
+            </div>
+            <p class="text-purple-400 text-sm mt-4">Likes + Comments</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium">Total Clicks</p>
+                    <h3 class="text-3xl font-bold text-white mt-1">{{ stats.link_clicks }}</h3>
+                </div>
+                <div class="p-2 bg-green-500/20 rounded-lg"><i class="fas fa-mouse-pointer text-green-500"></i></div>
+            </div>
+            <p class="text-green-400 text-sm mt-4">Link Traffic</p>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <div class="flex justify-between items-start">
+                <div>
+                    <p class="text-gray-400 text-sm font-medium">Scheduled Posts</p>
+                    <h3 class="text-3xl font-bold text-white mt-1">{{ stats.active_campaigns }}</h3>
+                </div>
+                <div class="p-2 bg-yellow-500/20 rounded-lg"><i class="fas fa-clock text-yellow-500"></i></div>
+            </div>
+            <p class="text-yellow-400 text-sm mt-4">Upcoming</p>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
+        <div class="lg:col-span-2 bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <h3 class="text-lg font-bold text-white mb-4">Engagement Trends (Last 7 Posts)</h3>
+            <div class="h-[300px]">
+                {% if stats.trend_data|length > 0 %}
+                    <canvas id="engagementChart"></canvas>
+                {% else %}
+                    <div class="flex items-center justify-center h-full text-gray-500">
+                        No data yet. Create posts to see trends!
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+        <div class="bg-gray-800 p-6 rounded-xl border border-gray-700">
+            <h3 class="text-lg font-bold text-white mb-4">Platform Mix</h3>
+            <div class="h-[300px] flex items-center justify-center">
+                <canvas id="platformChart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-xl overflow-hidden border border-gray-700">
+        <div class="p-6 border-b border-gray-700">
+            <h3 class="font-bold text-white">Live Post History</h3>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm text-left text-gray-400">
+                <thead class="text-xs text-gray-500 uppercase bg-gray-900/50">
+                    <tr>
+                        <th class="px-6 py-3">Status</th>
+                        <th class="px-6 py-3">Platforms</th>
+                        <th class="px-6 py-3">Caption</th>
+                        <th class="px-6 py-3">Reach</th>
+                        <th class="px-6 py-3 text-right">Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for post in posts %}
+                    <tr class="border-b border-gray-700 hover:bg-gray-700/50 transition">
+                        <td class="px-6 py-4">
+                            {% if 'Published' in post.status %}
+                                <span class="bg-green-500/20 text-green-400 px-3 py-1 rounded-full text-xs font-bold">● LIVE</span>
+                            {% elif 'Scheduled' in post.status %}
+                                <span class="bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-full text-xs font-bold">● QUEUED</span>
+                            {% else %}
+                                <span class="bg-red-500/20 text-red-400 px-3 py-1 rounded-full text-xs font-bold">FAILED</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-white">
+                            {% if 'linkedin' in post.platforms %}<i class="fab fa-linkedin text-blue-500 mr-2 text-lg"></i>{% endif %}
+                            {% if 'facebook' in post.platforms %}<i class="fab fa-facebook text-blue-600 mr-2 text-lg"></i>{% endif %}
+                            {% if 'instagram' in post.platforms %}<i class="fab fa-instagram text-pink-500 mr-2 text-lg"></i>{% endif %}
+                        </td>
+                        <td class="px-6 py-4 truncate max-w-xs">{{ post.caption[:50] }}...</td>
+                        <td class="px-6 py-4 font-mono text-white">{{ post.impressions }}</td>
+                        <td class="px-6 py-4 text-right">{{ post.timestamp.strftime('%d %b %H:%M') }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // DYNAMIC DATA FROM FLASK
+    const trendLabels = {{ stats.trend_labels | tojson }};
+    const trendData = {{ stats.trend_data | tojson }};
+    const platData = [{{ stats.li_pct }}, {{ stats.fb_pct }}, {{ stats.ig_pct }}];
+
+    // 1. LINE CHART
+    if(document.getElementById('engagementChart')) {
+        const ctx = document.getElementById('engagementChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: trendLabels,
+                datasets: [{
+                    label: 'Reach',
+                    data: trendData,
+                    borderColor: '#3B82F6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    fill: true,
+                    tension: 0.4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: {display: false} },
+                scales: { 
+                    y: { grid: {color: '#374151'}, ticks: {color: '#9CA3AF'} },
+                    x: { grid: {display: false}, ticks: {color: '#9CA3AF'} }
+                }
+            }
+        });
+    }
+
+    // 2. PIE CHART
+    const ctx2 = document.getElementById('platformChart').getContext('2d');
+    new Chart(ctx2, {
+        type: 'doughnut',
+        data: {
+            labels: ['LinkedIn', 'Facebook', 'Instagram'],
+            datasets: [{
+                data: platData,
+                backgroundColor: ['#3B82F6', '#2563EB', '#EC4899'],
+                borderWidth: 0
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: {position: 'right', labels: {color: '#fff'}} }
+        }
+    });
+</script>
+{% endblock %}
