@@ -36,7 +36,7 @@ elif os.environ.get('RENDER_EXTERNAL_URL'):
     BASE_URL = os.environ.get('RENDER_EXTERNAL_URL')
 # Priority 3: Fallback (Only works on same computer)
 else:
-    BASE_URL = "http://127.0.0.1:5000"
+    BASE_URL = "https://marketing-agent-yeej.onrender.com"
 
 print(f"✅ QR CODES WILL POINT TO: {BASE_URL}")
 
