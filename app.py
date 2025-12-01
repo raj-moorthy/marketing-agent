@@ -4,7 +4,6 @@ import json
 import requests
 import cloudinary
 import cloudinary.uploader
-import google.generativeai as genai
 from flask import Flask, render_template, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.sql import func
@@ -16,6 +15,7 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import random
+from openai import OpenAI
 
 app = Flask(__name__)
 
@@ -26,17 +26,19 @@ app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///realtime_agent.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # -----------------------------------------------------------
-# 🔧 AUTO-DETECT URL (Fixes the "Ngrok Offline" issue)
+# 🔧 CRITICAL URL FIX (Ensures QR Code works on Mobile)
 # -----------------------------------------------------------
-# If running on Render, use the Render URL. Otherwise, use localhost.
-BASE_URL = os.environ.get('RENDER_EXTERNAL_URL') or "http://127.0.0.1:5000"
-
-# Note: If RENDER_EXTERNAL_URL is incorrectly set by the system, 
-# you can manually set a variable named 'BASE_URL' in Render settings.
+# Priority 1: Explicit BASE_URL set in Environment (Render/Local)
 if os.environ.get('BASE_URL'):
     BASE_URL = os.environ.get('BASE_URL')
+# Priority 2: Automatic Render URL
+elif os.environ.get('RENDER_EXTERNAL_URL'):
+    BASE_URL = os.environ.get('RENDER_EXTERNAL_URL')
+# Priority 3: Fallback (Only works on same computer)
+else:
+    BASE_URL = "http://127.0.0.1:5000"
 
-print(f"🚀 SERVER RUNNING AT: {BASE_URL}")
+print(f"✅ QR CODES WILL POINT TO: {BASE_URL}")
 
 COMPANY_ADDRESS = "KCE@Coimbatore | Call: +91 9385789540"
 LOGO_PATH = "static/logo.png"
@@ -46,9 +48,8 @@ os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
 
 db = SQLAlchemy(app)
 
-# --- API SETUP (With Safety Checks) ---
+# Setup APIs
 try:
-    genai.configure(api_key=config.GEMINI_API_KEY)
     cloudinary.config(
         cloud_name=config.CLOUDINARY_CLOUD_NAME, 
         api_key=config.CLOUDINARY_API_KEY, 
@@ -119,9 +120,9 @@ class ImageHandler:
             logo = logo.resize((target_w, target_h), Image.Resampling.LANCZOS)
             overlay.paste(logo, (base_width - target_w - 30, 30), logo)
 
-        # QR Code (Fix: Uses dynamic BASE_URL)
+        # QR Code
         qr = qrcode.QRCode(box_size=10, border=0)
-        qr.add_data(f"{BASE_URL}/booking") # <--- THIS IS THE FIX
+        qr.add_data(f"{BASE_URL}/booking") # Uses the fixed BASE_URL
         qr.make(fit=True)
         qr_img = qr.make_image(fill_color="black", back_color="white").convert("RGBA")
         qr_img = qr_img.resize((90, 90))
@@ -141,52 +142,65 @@ class ImageHandler:
         return Image.alpha_composite(img, overlay)
 
     def process_request(self, file_storage, text_prompt):
-        try:
-            if file_storage:
-                raw_path = os.path.join(app.config['UPLOAD_FOLDER'], file_storage.filename)
-                file_storage.save(raw_path)
-                img = Image.open(raw_path).convert("RGBA")
-            else:
-                # Poster Generation
-                enhanced_prompt = f"Professional corporate photography poster, {text_prompt}, high resolution, realistic, cinematic lighting"
-                # Fix: Add timeout to prevent hanging
-                res = requests.get(f"https://image.pollinations.ai/prompt/{enhanced_prompt}", timeout=30)
-                if res.status_code != 200: raise Exception("AI Image Generator failed")
-                img = Image.open(BytesIO(res.content)).convert("RGBA")
-            
-            img = self.add_branding(img)
-            filename = f"gen_{int(datetime.datetime.now().timestamp())}.png"
-            save_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
-            img.save(save_path, format="PNG")
-            
-            # Cloudinary Upload (Common point of failure)
-            if not config.CLOUDINARY_CLOUD_NAME:
-                raise Exception("Cloudinary keys missing in Render Settings")
-                
+        if file_storage:
+            raw_path = os.path.join(app.config['UPLOAD_FOLDER'], file_storage.filename)
+            file_storage.save(raw_path)
+            img = Image.open(raw_path).convert("RGBA")
+        else:
+            seed = random.randint(1, 9999)
+            enhanced_prompt = f"Professional corporate photography poster, {text_prompt}, minimalist style, clean background, no text, no typography, 8k resolution, cinematic lighting"
+            api_url = f"https://image.pollinations.ai/prompt/{enhanced_prompt}?nologo=true&seed={seed}&width=1080&height=1350"
+            res = requests.get(api_url)
+            img = Image.open(BytesIO(res.content)).convert("RGBA")
+        
+        img = self.add_branding(img)
+        filename = f"gen_{int(datetime.datetime.now().timestamp())}.png"
+        save_path = os.path.join(app.config['PROCESSED_FOLDER'], filename)
+        img.save(save_path, format="PNG")
+        
+        if config.CLOUDINARY_CLOUD_NAME:
             res = cloudinary.uploader.upload(save_path)
             return save_path, res['secure_url']
-            
-        except Exception as e:
-            print(f"❌ Processing Error: {e}")
-            raise e # Send error back to frontend
+        return save_path, f"/{save_path}"
 
-# --- AI AGENT ---
+# --- CONTENT AGENT (STABLE TEXT ONLY) ---
 class ContentAgent:
     def generate_captions(self, local_path, topic):
         try:
-            img = Image.open(local_path)
-            model = genai.GenerativeModel('gemini-2.5-flash')
+            client = OpenAI(
+                api_key=config.GROQ_API_KEY,
+                base_url="https://api.groq.com/openai/v1"
+            )
+            
             prompt = f"""
-            Topic: {topic if topic else "Photography"}
-            Context: Photography Studio.
-            Generate 3 captions (JSON keys: linkedin, facebook, instagram).
-            Rules: Long paragraphs, Storytelling, "Book Now" CTA.
+            You are a Marketing Manager for a High-End Photography Studio.
+            Context: We just took a stunning photo related to: "{topic if topic else 'Professional Corporate/Event Photography'}".
+            
+            Write 3 distinct social media posts in JSON format.
+            Keys must be: "linkedin", "facebook", "instagram".
+            
+            1. **LINKEDIN:** 200 words. Discuss the importance of professional imagery, lighting, and capturing the right moment. Professional tone.
+            2. **FACEBOOK:** 100 words. Engaging, community-focused. Ask a question.
+            3. **INSTAGRAM:** Punchy hook + 30 relevant hashtags.
+            
+            MANDATORY ENDING: "Scan the QR code to book your session!"
             """
-            response = model.generate_content([prompt, img])
-            text = response.text.replace("```json", "").replace("```", "").strip()
-            return json.loads(text)
-        except:
-            return {"linkedin": "Book Now.", "facebook": "Book Now.", "instagram": "Book Now."}
+
+            chat_completion = client.chat.completions.create(
+                messages=[{"role": "user", "content": prompt}],
+                model="llama-3.3-70b-versatile", # The Stable Text Model
+                response_format={"type": "json_object"}
+            )
+            
+            return json.loads(chat_completion.choices[0].message.content)
+            
+        except Exception as e:
+            print(f"❌ AI Error: {e}")
+            return {
+                "linkedin": "In the world of business, your image is your brand. This latest shot exemplifies our commitment to quality. Scan the QR code to book.",
+                "facebook": "We absolutely love how this session turned out! ❤️ When was the last time you updated your portfolio? Scan the code to book!",
+                "instagram": "Elevate your image. ✨ \nScan to Book! 📸 \n\n#Photography #Portrait #Studio #Canon #BookNow"
+            }
 
 # --- BROADCASTER ---
 class SocialBroadcaster:
@@ -199,8 +213,7 @@ class SocialBroadcaster:
                 url = "https://api.linkedin.com/v2/ugcPosts"
                 headers = {"Authorization": f"Bearer {config.LINKEDIN_ACCESS_TOKEN}", "Content-Type": "application/json"}
                 payload = {
-                    "author": author,
-                    "lifecycleState": "PUBLISHED",
+                    "author": author, "lifecycleState": "PUBLISHED",
                     "specificContent": {
                         "com.linkedin.ugc.ShareContent": {
                             "shareCommentary": {"text": captions.get('linkedin', '')},
@@ -248,7 +261,6 @@ def booking_page(): return render_template('booking.html')
 @app.route('/dashboard')
 def dashboard():
     posts = Post.query.order_by(Post.timestamp.desc()).all()
-    # Simplified stats for brevity
     total_impressions = db.session.query(func.sum(Post.impressions)).scalar() or 0
     total_clicks = db.session.query(func.sum(Post.clicks)).scalar() or 0
     stats = {
@@ -275,6 +287,7 @@ def chat_generate():
         captions = agent.generate_captions(local_path, prompt)
         return jsonify({"image_url": public_url, "captions": captions})
     except Exception as e:
+        print(f"SERVER ERROR: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/api/confirm_post', methods=['POST'])
