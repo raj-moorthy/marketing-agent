@@ -189,7 +189,7 @@ class ContentAgent:
         try:
             client = OpenAI(api_key=config.GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
             prompt = f"Write 3 photography marketing posts about '{topic}'. End with 'Scan QR to book!'."
-            chat = client.chat.completions.create(messages=[{"role":"user", "content":prompt}], model="meta-llama/llama-guard-4-12b", response_format={"type":"json_object"})
+            chat = client.chat.completions.create(messages=[{"role":"user", "content":prompt}], model="llama-3.3-70b-versatile", response_format={"type":"json_object"})
             return json.loads(chat.choices[0].message.content)
         except:
             return {"linkedin": "Book Now", "facebook": "Book Now", "instagram": "Book Now"}
